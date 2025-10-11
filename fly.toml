@@ -1,0 +1,33 @@
+# fly.toml app configuration file generated for boker-discord-uptime-kuma on 2025-10-11T00:11:47-05:00
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
+
+app = 'boker-discord-uptime-kuma'
+primary_region = 'iad'
+
+[build]
+  dockerfile = 'Dockerfile'
+
+[deploy]
+  strategy = 'immediate'
+
+[env]
+  DATA_DIR = '/app/data'
+  EMBED_COLOR = '5814783'
+  UPDATE_INTERVAL = '60'
+
+[[mounts]]
+  source = 'bot_data'
+  destination = '/app/data'
+
+[http_service]
+  internal_port = 8080
+  auto_stop_machines = 'off'
+  auto_start_machines = false
+  min_machines_running = 1
+
+[[vm]]
+  cpu_kind = 'shared'
+  cpus = 1
+  memory_mb = 256
