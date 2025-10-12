@@ -8,10 +8,10 @@ export class UptimeKumaService extends EventEmitter {
   private socket: Socket | null = null;
   private monitors: Map<number, MonitorStats> = new Map();
   private reconnectAttempts = 0;
-  private maxReconnectAttempts = 10;
   private reconnectDelay = 5000;
   private isAuthenticated = false;
   private logger: Logger;
+  private manualReconnectTimeout: NodeJS.Timeout | null = null;
 
   constructor() {
     super();
@@ -26,7 +26,7 @@ export class UptimeKumaService extends EventEmitter {
         this.socket = io(config.uptimeKuma.url, {
           reconnection: true,
           reconnectionDelay: this.reconnectDelay,
-          reconnectionAttempts: this.maxReconnectAttempts,
+          reconnectionAttempts: Infinity,
           transports: ['websocket', 'polling'],
         });
 
@@ -59,11 +59,29 @@ export class UptimeKumaService extends EventEmitter {
       this.logger.warn(`Disconnected from Uptime Kuma: ${reason}`);
       this.isAuthenticated = false;
       this.emit('disconnected', reason);
+      
+      // Manual reconnection fallback after 30 seconds of being disconnected
+      if (this.manualReconnectTimeout) {
+        clearTimeout(this.manualReconnectTimeout);
+      }
+      this.manualReconnectTimeout = setTimeout(() => {
+        if (!this.isConnected() && this.socket) {
+          this.logger.info('Attempting manual reconnection...');
+          this.socket.connect();
+        }
+      }, 30000);
     });
 
     this.socket.on('connect', () => {
-      if (this.isAuthenticated) {
-        this.logger.info('Reconnected to Uptime Kuma');
+      // Clear manual reconnection timeout since we're connected
+      if (this.manualReconnectTimeout) {
+        clearTimeout(this.manualReconnectTimeout);
+        this.manualReconnectTimeout = null;
+      }
+
+      if (this.reconnectAttempts > 0) {
+        this.logger.info('Reconnected to Uptime Kuma, re-authenticating...');
+        this.reconnectAttempts = 0;
         this.authenticate().catch(err => {
           this.logger.error(`Re-authentication failed: ${err.message}`);
         });
@@ -89,7 +107,8 @@ export class UptimeKumaService extends EventEmitter {
     });
 
     this.socket.on('connect_error', (error) => {
-      this.logger.error(`Socket.io connection error: ${error.message}`);
+      this.reconnectAttempts++;
+      this.logger.error(`Socket.io connection error (attempt ${this.reconnectAttempts}): ${error.message}`);
     });
 
     this.socket.on('error', (error) => {
@@ -243,6 +262,11 @@ export class UptimeKumaService extends EventEmitter {
   }
 
   public disconnect(): void {
+    if (this.manualReconnectTimeout) {
+      clearTimeout(this.manualReconnectTimeout);
+      this.manualReconnectTimeout = null;
+    }
+
     if (this.socket) {
       this.logger.info('Disconnecting from Uptime Kuma');
       this.socket.disconnect();
