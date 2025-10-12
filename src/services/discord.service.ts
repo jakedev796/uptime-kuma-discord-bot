@@ -8,7 +8,7 @@ import { Logger } from '../utils/logger';
 
 export class DiscordService {
   private client: Client;
-  private channel: TextChannel | null = null;
+  private channels: Map<string, TextChannel> = new Map();
   private logger: Logger;
   private maxMonitorsPerEmbed = 20;
   private commandsService: CommandsService;
@@ -39,7 +39,7 @@ export class DiscordService {
         this.logger.info(`Discord bot logged in as ${client.user?.tag}`);
         
         try {
-          await this.initializeChannel();
+          await this.initializeChannels();
           await this.registerCommands();
           this.setupCommandHandler();
           resolve();
@@ -119,28 +119,39 @@ export class DiscordService {
     });
   }
 
-  private async initializeChannel(): Promise<void> {
-    const channelId = configStorage.getChannelId();
+  private async initializeChannels(): Promise<void> {
+    const guildIds = configStorage.getAllGuildIds();
     
-    if (!channelId) {
-      throw new Error('No channel configured. Use /set-channel command to set one.');
+    if (guildIds.length === 0) {
+      this.logger.info('No guilds configured yet');
+      return;
     }
 
-    try {
-      const channel = await this.client.channels.fetch(channelId);
+    for (const guildId of guildIds) {
+      const channelId = configStorage.getChannelId(guildId);
       
-      if (!channel || !channel.isTextBased() || channel.isDMBased()) {
-        throw new Error('Invalid channel or channel is not a text channel');
+      if (!channelId) {
+        this.logger.warn(`No channel configured for guild ${guildId}`);
+        continue;
       }
 
-      this.channel = channel as TextChannel;
-      this.logger.info(`Initialized channel: ${this.channel.name}`);
-    } catch (error: any) {
-      throw new Error(`Failed to initialize Discord channel: ${error.message}`);
+      try {
+        const channel = await this.client.channels.fetch(channelId);
+        
+        if (!channel || !channel.isTextBased() || channel.isDMBased()) {
+          this.logger.warn(`Invalid channel ${channelId} for guild ${guildId}`);
+          continue;
+        }
+
+        this.channels.set(guildId, channel as TextChannel);
+        this.logger.info(`Initialized channel for guild ${guildId}: ${(channel as TextChannel).name}`);
+      } catch (error: any) {
+        this.logger.error(`Failed to initialize channel for guild ${guildId}: ${error.message}`);
+      }
     }
   }
 
-  public async setChannel(channelId: string): Promise<void> {
+  public async setChannel(guildId: string, channelId: string): Promise<void> {
     try {
       const channel = await this.client.channels.fetch(channelId);
       
@@ -148,52 +159,66 @@ export class DiscordService {
         throw new Error('Invalid channel or channel is not a text channel');
       }
 
-      this.channel = channel as TextChannel;
-      configStorage.setMessageIds([]);
-      configStorage.setChannelId(channelId);
-      this.logger.info(`Changed status channel to: ${this.channel.name}`);
+      const textChannel = channel as TextChannel;
+      this.channels.set(guildId, textChannel);
+      configStorage.setMessageIds(guildId, []);
+      configStorage.setChannelId(guildId, channelId);
+      this.logger.info(`Changed status channel for guild ${guildId} to: ${textChannel.name}`);
     } catch (error: any) {
       throw new Error(`Failed to set channel: ${error.message}`);
     }
   }
 
   public async updateMonitorStatus(monitors: MonitorStats[]): Promise<void> {
-    if (!this.channel) {
-      this.logger.warn('Channel not initialized, skipping update');
+    const guildIds = configStorage.getAllGuildIds();
+    
+    if (guildIds.length === 0) {
+      this.logger.warn('No guilds configured, skipping update');
       return;
     }
 
-    try {
-      const trackedIds = configStorage.getMonitorIds();
-      const filteredMonitors = trackedIds.length === 0
-        ? monitors
-        : monitors.filter(m => trackedIds.includes(m.monitor.id));
-
-      if (filteredMonitors.length === 0) {
-        this.logger.warn('No monitors to display after filtering');
-        return;
+    for (const guildId of guildIds) {
+      // Skip if guild doesn't actually exist in config (shouldn't happen but safety check)
+      if (!configStorage.guildExists(guildId)) {
+        continue;
       }
 
-      const embeds = this.createEmbeds(filteredMonitors, monitors.length);
-      
-      const messageIds = configStorage.getMessageIds();
-      if (messageIds.length === 0) {
-        await this.createNewMessages(embeds);
-      } else {
-        await this.updateExistingMessages(embeds);
+      const channel = this.channels.get(guildId);
+      if (!channel) {
+        continue;
       }
-    } catch (error: any) {
-      this.logger.error(`Failed to update monitor status: ${error.message}`);
+
+      try {
+        const trackedIds = configStorage.getMonitorIds(guildId);
+        const filteredMonitors = trackedIds.length === 0
+          ? monitors
+          : monitors.filter(m => trackedIds.includes(m.monitor.id));
+
+        if (filteredMonitors.length === 0) {
+          continue;
+        }
+
+        const embeds = this.createEmbeds(guildId, filteredMonitors, monitors.length);
+        
+        const messageIds = configStorage.getMessageIds(guildId);
+        if (messageIds.length === 0) {
+          await this.createNewMessages(guildId, channel, embeds);
+        } else {
+          await this.updateExistingMessages(guildId, channel, embeds);
+        }
+      } catch (error: any) {
+        this.logger.error(`Failed to update monitor status for guild ${guildId}: ${error.message}`);
+      }
     }
   }
 
-  private createEmbeds(monitors: MonitorStats[], totalMonitors: number): EmbedBuilder[] {
+  private createEmbeds(guildId: string, monitors: MonitorStats[], totalMonitors: number): EmbedBuilder[] {
     const embeds: EmbedBuilder[] = [];
-    const statusMessage = configStorage.getStatusMessage();
-    const groups = configStorage.getGroups();
+    const statusMessage = configStorage.getStatusMessage(guildId);
+    const groups = configStorage.getGroups(guildId);
     
     const embed = new EmbedBuilder()
-      .setColor(configStorage.getEmbedColor())
+      .setColor(configStorage.getEmbedColor(guildId))
       .setTitle(statusMessage)
       .setTimestamp()
       .setFooter({ text: 'Last updated' });
@@ -306,39 +331,35 @@ export class DiscordService {
            `🔵 **Maintenance:** ${statusCounts.maintenance}`;
   }
 
-  private async createNewMessages(embeds: EmbedBuilder[]): Promise<void> {
-    if (!this.channel) return;
-
+  private async createNewMessages(guildId: string, channel: TextChannel, embeds: EmbedBuilder[]): Promise<void> {
     const newMessageIds: string[] = [];
     for (const embed of embeds) {
-      const message = await this.channel.send({ embeds: [embed] });
+      const message = await channel.send({ embeds: [embed] });
       newMessageIds.push(message.id);
     }
 
-    configStorage.setMessageIds(newMessageIds);
-    this.logger.info(`Created ${embeds.length} new status message(s)`);
+    configStorage.setMessageIds(guildId, newMessageIds);
+    this.logger.info(`Created ${embeds.length} new status message(s) for guild ${guildId}`);
   }
 
-  private async updateExistingMessages(embeds: EmbedBuilder[]): Promise<void> {
-    if (!this.channel) return;
-
-    const messageIds = configStorage.getMessageIds();
+  private async updateExistingMessages(guildId: string, channel: TextChannel, embeds: EmbedBuilder[]): Promise<void> {
+    const messageIds = configStorage.getMessageIds(guildId);
     const newMessageIds: string[] = [];
 
     for (let i = 0; i < embeds.length; i++) {
       try {
         if (i < messageIds.length) {
-          const message = await this.channel.messages.fetch(messageIds[i]);
+          const message = await channel.messages.fetch(messageIds[i]);
           await message.edit({ embeds: [embeds[i]] });
           newMessageIds.push(messageIds[i]);
         } else {
-          const message = await this.channel.send({ embeds: [embeds[i]] });
+          const message = await channel.send({ embeds: [embeds[i]] });
           newMessageIds.push(message.id);
         }
       } catch (error: any) {
-        this.logger.error(`Failed to update message: ${error.message}`);
-        configStorage.setMessageIds([]);
-        await this.createNewMessages(embeds);
+        this.logger.error(`Failed to update message for guild ${guildId}: ${error.message}`);
+        configStorage.setMessageIds(guildId, []);
+        await this.createNewMessages(guildId, channel, embeds);
         return;
       }
     }
@@ -347,7 +368,7 @@ export class DiscordService {
       const toDelete = messageIds.slice(embeds.length);
       for (const messageId of toDelete) {
         try {
-          const message = await this.channel.messages.fetch(messageId);
+          const message = await channel.messages.fetch(messageId);
           await message.delete();
         } catch (error: any) {
           this.logger.warn(`Failed to delete message ${messageId}: ${error.message}`);
@@ -355,7 +376,7 @@ export class DiscordService {
       }
     }
 
-    configStorage.setMessageIds(newMessageIds);
+    configStorage.setMessageIds(guildId, newMessageIds);
   }
 
   private chunkArray<T>(array: T[], size: number): T[][] {

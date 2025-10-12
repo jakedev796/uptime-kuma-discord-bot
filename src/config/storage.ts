@@ -7,7 +7,7 @@ export interface MonitorGroup {
   monitorIds: number[];
 }
 
-export interface BotConfig {
+export interface GuildConfig {
   channelId: string | null;
   messageIds: string[];
   monitorIds: number[];
@@ -17,9 +17,13 @@ export interface BotConfig {
   statusMessage: string;
 }
 
+export interface MultiGuildConfig {
+  guilds: Record<string, GuildConfig>;
+}
+
 export class ConfigStorage {
   private configPath: string;
-  private config: BotConfig;
+  private config: MultiGuildConfig;
   private logger: Logger;
 
   constructor() {
@@ -34,35 +38,38 @@ export class ConfigStorage {
     this.config = this.load();
   }
 
-  private load(): BotConfig {
+  private load(): MultiGuildConfig {
     if (existsSync(this.configPath)) {
       try {
         const data = readFileSync(this.configPath, 'utf-8');
         const loaded = JSON.parse(data);
+        
+        // Migration: Convert old single-guild format to multi-guild
+        if (loaded.channelId !== undefined && !loaded.guilds) {
+          this.logger.info('Migrating old config format to multi-guild format');
+          return {
+            guilds: {
+              'legacy': {
+                channelId: loaded.channelId || null,
+                messageIds: loaded.messageIds || [],
+                monitorIds: loaded.monitorIds || [],
+                groups: loaded.groups || [],
+                updateInterval: loaded.updateInterval || parseInt(process.env.UPDATE_INTERVAL || '60', 10) * 1000,
+                embedColor: loaded.embedColor || parseInt(process.env.EMBED_COLOR || '5814783', 10),
+                statusMessage: loaded.statusMessage || 'Service Status',
+              }
+            }
+          };
+        }
+        
         this.logger.info('Loaded configuration from storage');
-        return {
-          channelId: loaded.channelId || null,
-          messageIds: loaded.messageIds || [],
-          monitorIds: loaded.monitorIds || [],
-          groups: loaded.groups || [],
-          updateInterval: loaded.updateInterval || parseInt(process.env.UPDATE_INTERVAL || '60', 10) * 1000,
-          embedColor: loaded.embedColor || parseInt(process.env.EMBED_COLOR || '5814783', 10),
-          statusMessage: loaded.statusMessage || 'Service Status',
-        };
+        return loaded;
       } catch (error: any) {
         this.logger.error(`Failed to load config: ${error.message}`);
       }
     }
 
-    return {
-      channelId: null,
-      messageIds: [],
-      monitorIds: [],
-      groups: [],
-      updateInterval: parseInt(process.env.UPDATE_INTERVAL || '60', 10) * 1000,
-      embedColor: parseInt(process.env.EMBED_COLOR || '5814783', 10),
-      statusMessage: 'Service Status',
-    };
+    return { guilds: {} };
   }
 
   private save(): void {
@@ -74,117 +81,179 @@ export class ConfigStorage {
     }
   }
 
-  public getMonitorIds(): number[] {
-    return [...this.config.monitorIds];
+  private getDefaultConfig(): GuildConfig {
+    return {
+      channelId: null,
+      messageIds: [],
+      monitorIds: [],
+      groups: [],
+      updateInterval: parseInt(process.env.UPDATE_INTERVAL || '60', 10) * 1000,
+      embedColor: parseInt(process.env.EMBED_COLOR || '5814783', 10),
+      statusMessage: 'Service Status',
+    };
   }
 
-  public setMonitorIds(ids: number[]): void {
-    this.config.monitorIds = ids;
-    this.save();
+  private getGuildConfig(guildId: string, createIfMissing: boolean = true): GuildConfig {
+    if (!this.config.guilds[guildId]) {
+      if (!createIfMissing) {
+        return this.getDefaultConfig(); // Return default without saving
+      }
+      this.config.guilds[guildId] = this.getDefaultConfig();
+      this.save();
+    }
+    return this.config.guilds[guildId];
   }
 
-  public addMonitor(id: number): boolean {
-    if (!this.config.monitorIds.includes(id)) {
-      this.config.monitorIds.push(id);
+  public guildExists(guildId: string): boolean {
+    return !!this.config.guilds[guildId];
+  }
+
+  public getAllGuildIds(): string[] {
+    return Object.keys(this.config.guilds);
+  }
+
+  public removeGuild(guildId: string): boolean {
+    if (this.config.guilds[guildId]) {
+      delete this.config.guilds[guildId];
       this.save();
       return true;
     }
     return false;
   }
 
-  public removeMonitor(id: number): boolean {
-    const index = this.config.monitorIds.indexOf(id);
+  public getMonitorIds(guildId: string): number[] {
+    const config = this.getGuildConfig(guildId);
+    return [...config.monitorIds];
+  }
+
+  public setMonitorIds(guildId: string, ids: number[]): void {
+    const config = this.getGuildConfig(guildId);
+    config.monitorIds = ids;
+    this.save();
+  }
+
+  public addMonitor(guildId: string, id: number): boolean {
+    const config = this.getGuildConfig(guildId);
+    if (!config.monitorIds.includes(id)) {
+      config.monitorIds.push(id);
+      this.save();
+      return true;
+    }
+    return false;
+  }
+
+  public removeMonitor(guildId: string, id: number): boolean {
+    const config = this.getGuildConfig(guildId);
+    const index = config.monitorIds.indexOf(id);
     if (index > -1) {
-      this.config.monitorIds.splice(index, 1);
+      config.monitorIds.splice(index, 1);
       this.save();
       return true;
     }
     return false;
   }
 
-  public clearMonitors(): void {
-    this.config.monitorIds = [];
+  public clearMonitors(guildId: string): void {
+    const config = this.getGuildConfig(guildId);
+    config.monitorIds = [];
     this.save();
   }
 
-  public getUpdateInterval(): number {
-    return this.config.updateInterval;
+  public getUpdateInterval(guildId: string): number {
+    const config = this.getGuildConfig(guildId);
+    return config.updateInterval;
   }
 
-  public setUpdateInterval(interval: number): void {
+  public setUpdateInterval(guildId: string, interval: number): void {
     if (interval >= 10000) {
-      this.config.updateInterval = interval;
+      const config = this.getGuildConfig(guildId);
+      config.updateInterval = interval;
       this.save();
     }
   }
 
-  public getEmbedColor(): number {
-    return this.config.embedColor;
+  public getEmbedColor(guildId: string): number {
+    const config = this.getGuildConfig(guildId);
+    return config.embedColor;
   }
 
-  public setEmbedColor(color: number): void {
-    this.config.embedColor = color;
+  public setEmbedColor(guildId: string, color: number): void {
+    const config = this.getGuildConfig(guildId);
+    config.embedColor = color;
     this.save();
   }
 
-  public getConfig(): BotConfig {
-    return { ...this.config };
+  public getConfig(guildId: string): GuildConfig {
+    return { ...this.getGuildConfig(guildId, false) }; // Don't auto-create when just reading
   }
 
-  public getChannelId(): string | null {
-    return this.config.channelId;
+  public getChannelId(guildId: string): string | null {
+    if (!this.guildExists(guildId)) {
+      return null; // Don't auto-create guild just to check channel
+    }
+    const config = this.getGuildConfig(guildId, false);
+    return config.channelId;
   }
 
-  public setChannelId(channelId: string): void {
-    this.config.channelId = channelId;
+  public setChannelId(guildId: string, channelId: string): void {
+    const config = this.getGuildConfig(guildId);
+    config.channelId = channelId;
     this.save();
   }
 
-  public getStatusMessage(): string {
-    return this.config.statusMessage;
+  public getStatusMessage(guildId: string): string {
+    const config = this.getGuildConfig(guildId);
+    return config.statusMessage;
   }
 
-  public setStatusMessage(message: string): void {
-    this.config.statusMessage = message;
+  public setStatusMessage(guildId: string, message: string): void {
+    const config = this.getGuildConfig(guildId);
+    config.statusMessage = message;
     this.save();
   }
 
-  public getMessageIds(): string[] {
-    return [...this.config.messageIds];
+  public getMessageIds(guildId: string): string[] {
+    const config = this.getGuildConfig(guildId);
+    return [...config.messageIds];
   }
 
-  public setMessageIds(ids: string[]): void {
-    this.config.messageIds = ids;
+  public setMessageIds(guildId: string, ids: string[]): void {
+    const config = this.getGuildConfig(guildId);
+    config.messageIds = ids;
     this.save();
   }
 
-  public getGroups(): MonitorGroup[] {
-    return [...this.config.groups];
+  public getGroups(guildId: string): MonitorGroup[] {
+    const config = this.getGuildConfig(guildId);
+    return [...config.groups];
   }
 
-  public addGroup(name: string): boolean {
-    if (this.config.groups.some(g => g.name.toLowerCase() === name.toLowerCase())) {
+  public addGroup(guildId: string, name: string): boolean {
+    const config = this.getGuildConfig(guildId);
+    if (config.groups.some(g => g.name.toLowerCase() === name.toLowerCase())) {
       return false;
     }
-    this.config.groups.push({ name, monitorIds: [] });
+    config.groups.push({ name, monitorIds: [] });
     this.save();
     return true;
   }
 
-  public removeGroup(name: string): boolean {
-    const index = this.config.groups.findIndex(g => g.name.toLowerCase() === name.toLowerCase());
+  public removeGroup(guildId: string, name: string): boolean {
+    const config = this.getGuildConfig(guildId);
+    const index = config.groups.findIndex(g => g.name.toLowerCase() === name.toLowerCase());
     if (index > -1) {
-      this.config.groups.splice(index, 1);
+      config.groups.splice(index, 1);
       this.save();
       return true;
     }
     return false;
   }
 
-  public addMonitorToGroup(groupName: string, monitorId: number): boolean {
-    const group = this.config.groups.find(g => g.name.toLowerCase() === groupName.toLowerCase());
+  public addMonitorToGroup(guildId: string, groupName: string, monitorId: number): boolean {
+    const config = this.getGuildConfig(guildId);
+    const group = config.groups.find(g => g.name.toLowerCase() === groupName.toLowerCase());
     if (group && !group.monitorIds.includes(monitorId)) {
-      for (const g of this.config.groups) {
+      for (const g of config.groups) {
         const idx = g.monitorIds.indexOf(monitorId);
         if (idx > -1) {
           g.monitorIds.splice(idx, 1);
@@ -197,9 +266,10 @@ export class ConfigStorage {
     return false;
   }
 
-  public removeMonitorFromGroup(monitorId: number): boolean {
+  public removeMonitorFromGroup(guildId: string, monitorId: number): boolean {
+    const config = this.getGuildConfig(guildId);
     let found = false;
-    for (const group of this.config.groups) {
+    for (const group of config.groups) {
       const index = group.monitorIds.indexOf(monitorId);
       if (index > -1) {
         group.monitorIds.splice(index, 1);

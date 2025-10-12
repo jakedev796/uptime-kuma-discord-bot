@@ -89,23 +89,23 @@ class UptimeKumaDiscordBot {
         return;
       }
 
-      const trackedIds = configStorage.getMonitorIds();
-      const monitors = this.uptimeKuma.getMonitorStats(trackedIds);
+      const monitors = this.uptimeKuma.getMonitorStats();
       this.discord.updateMonitorStatus(monitors).catch(error => {
         this.logger.error(`Failed to update Discord status: ${error.message}`);
       });
     };
 
-    const interval = configStorage.getUpdateInterval();
-    this.updateInterval = setInterval(updateFn, interval);
+    // Use a default interval; guilds can have different intervals but we'll use a common update cycle
+    const defaultInterval = parseInt(process.env.UPDATE_INTERVAL || '60', 10) * 1000;
+    this.updateInterval = setInterval(updateFn, defaultInterval);
 
-    this.logger.info(`Update interval set to ${interval / 1000} seconds`);
+    this.logger.info(`Update interval set to ${defaultInterval / 1000} seconds`);
     
-    const trackedIds = configStorage.getMonitorIds();
-    if (trackedIds.length > 0) {
-      this.logger.info(`Tracking ${trackedIds.length} specific monitor(s): ${trackedIds.join(', ')}`);
+    const guildIds = configStorage.getAllGuildIds();
+    if (guildIds.length > 0) {
+      this.logger.info(`Configured for ${guildIds.length} guild(s)`);
     } else {
-      this.logger.info('Tracking all monitors');
+      this.logger.info('No guilds configured yet. Use /set-channel in a Discord server to get started.');
     }
   }
 

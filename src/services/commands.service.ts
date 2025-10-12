@@ -157,6 +157,12 @@ export class CommandsService {
           .setDescription('Show current bot configuration'),
         execute: this.showConfig.bind(this),
       },
+      {
+        data: new SlashCommandBuilder()
+          .setName('reset-config')
+          .setDescription('⚠️ Reset this server\'s configuration to defaults'),
+        execute: this.resetConfig.bind(this),
+      },
     ];
 
     for (const command of commands) {
@@ -190,11 +196,15 @@ export class CommandsService {
     uptimeKuma: UptimeKumaService
   ): Promise<void> {
     if (!await this.checkAdmin(interaction)) return;
+    if (!interaction.guildId) {
+      await interaction.reply({ content: '❌ This command can only be used in a server.', flags: MessageFlags.Ephemeral });
+      return;
+    }
 
     const monitorIdStr = interaction.options.getString('monitor', true);
     const monitorId = parseInt(monitorIdStr, 10);
 
-    const currentIds = configStorage.getMonitorIds();
+    const currentIds = configStorage.getMonitorIds(interaction.guildId);
     if (currentIds.includes(monitorId)) {
       await interaction.reply({
         content: '⚠️ This monitor is already being tracked.',
@@ -204,7 +214,7 @@ export class CommandsService {
     }
 
     const newIds = [...currentIds, monitorId];
-    configStorage.setMonitorIds(newIds);
+    configStorage.setMonitorIds(interaction.guildId, newIds);
 
     const monitors = uptimeKuma.getAllMonitors();
     const monitorName = monitors.get(monitorId)?.name || `ID ${monitorId}`;
@@ -223,11 +233,15 @@ export class CommandsService {
     uptimeKuma: UptimeKumaService
   ): Promise<void> {
     if (!await this.checkAdmin(interaction)) return;
+    if (!interaction.guildId) {
+      await interaction.reply({ content: '❌ This command can only be used in a server.', flags: MessageFlags.Ephemeral });
+      return;
+    }
 
     const monitorIdStr = interaction.options.getString('monitor', true);
     const monitorId = parseInt(monitorIdStr, 10);
 
-    const currentIds = configStorage.getMonitorIds();
+    const currentIds = configStorage.getMonitorIds(interaction.guildId);
     const newIds = currentIds.filter(id => id !== monitorId);
     
     if (currentIds.length === newIds.length) {
@@ -238,7 +252,7 @@ export class CommandsService {
       return;
     }
 
-    configStorage.setMonitorIds(newIds);
+    configStorage.setMonitorIds(interaction.guildId, newIds);
 
     const monitors = uptimeKuma.getAllMonitors();
     const monitorName = monitors.get(monitorId)?.name || `ID ${monitorId}`;
@@ -257,8 +271,12 @@ export class CommandsService {
     uptimeKuma: UptimeKumaService
   ): Promise<void> {
     if (!await this.checkAdmin(interaction)) return;
+    if (!interaction.guildId) {
+      await interaction.reply({ content: '❌ This command can only be used in a server.', flags: MessageFlags.Ephemeral });
+      return;
+    }
 
-    configStorage.clearMonitors();
+    configStorage.clearMonitors(interaction.guildId);
 
     const embed = new EmbedBuilder()
       .setColor(0x0099ff)
@@ -276,6 +294,10 @@ export class CommandsService {
     uptimeKuma: UptimeKumaService
   ): Promise<void> {
     if (!await this.checkAdmin(interaction)) return;
+    if (!interaction.guildId) {
+      await interaction.reply({ content: '❌ This command can only be used in a server.', flags: MessageFlags.Ephemeral });
+      return;
+    }
 
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
@@ -284,7 +306,7 @@ export class CommandsService {
     try {
       const discordService = (interaction.client as any).discordService;
       if (discordService) {
-        await discordService.setChannel(channel.id);
+        await discordService.setChannel(interaction.guildId, channel.id);
         
         const embed = new EmbedBuilder()
           .setColor(0x00ff00)
@@ -308,10 +330,14 @@ export class CommandsService {
     uptimeKuma: UptimeKumaService
   ): Promise<void> {
     if (!await this.checkAdmin(interaction)) return;
+    if (!interaction.guildId) {
+      await interaction.reply({ content: '❌ This command can only be used in a server.', flags: MessageFlags.Ephemeral });
+      return;
+    }
 
     const message = interaction.options.getString('message', true);
     
-    configStorage.setStatusMessage(message);
+    configStorage.setStatusMessage(interaction.guildId, message);
 
     const embed = new EmbedBuilder()
       .setColor(0x00ff00)
@@ -327,15 +353,19 @@ export class CommandsService {
     uptimeKuma: UptimeKumaService
   ): Promise<void> {
     if (!await this.checkAdmin(interaction)) return;
+    if (!interaction.guildId) {
+      await interaction.reply({ content: '❌ This command can only be used in a server.', flags: MessageFlags.Ephemeral });
+      return;
+    }
 
-    const botConfig = configStorage.getConfig();
+    const botConfig = configStorage.getConfig(interaction.guildId);
     const trackedIds = botConfig.monitorIds;
     const channelId = botConfig.channelId;
-    const groups = configStorage.getGroups();
+    const groups = configStorage.getGroups(interaction.guildId);
     const monitors = uptimeKuma.getAllMonitors();
 
     const embed = new EmbedBuilder()
-      .setColor(configStorage.getEmbedColor())
+      .setColor(configStorage.getEmbedColor(interaction.guildId))
       .setTitle('⚙️ Bot Configuration & Status')
       .addFields(
         {
@@ -401,15 +431,111 @@ export class CommandsService {
     await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
   }
 
+  private async resetConfig(
+    interaction: ChatInputCommandInteraction,
+    uptimeKuma: UptimeKumaService
+  ): Promise<void> {
+    if (!await this.checkAdmin(interaction)) return;
+    if (!interaction.guildId) {
+      await interaction.reply({ content: '❌ This command can only be used in a server.', flags: MessageFlags.Ephemeral });
+      return;
+    }
+
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+    let messagesDeleted = 0;
+
+    // Delete existing embed messages for this guild
+    const channelId = configStorage.getChannelId(interaction.guildId);
+    const messageIds = configStorage.getMessageIds(interaction.guildId);
+    
+    if (channelId && messageIds.length > 0) {
+      try {
+        const channel = await interaction.client.channels.fetch(channelId);
+        if (channel && channel.isTextBased() && !channel.isDMBased()) {
+          for (const messageId of messageIds) {
+            try {
+              const message = await (channel as any).messages.fetch(messageId);
+              await message.delete();
+              messagesDeleted++;
+            } catch (error: any) {
+              this.logger.warn(`Failed to delete message ${messageId}: ${error.message}`);
+            }
+          }
+        }
+      } catch (error: any) {
+        this.logger.warn(`Failed to fetch channel for message deletion: ${error.message}`);
+      }
+    }
+
+    // Also delete legacy guild messages if they exist
+    const allGuildIds = configStorage.getAllGuildIds();
+    const legacyGuilds = allGuildIds.filter(id => id === 'legacy');
+    let cleanedLegacy = false;
+    
+    if (legacyGuilds.length > 0) {
+      for (const legacyId of legacyGuilds) {
+        const legacyChannelId = configStorage.getChannelId(legacyId);
+        const legacyMessageIds = configStorage.getMessageIds(legacyId);
+        
+        if (legacyChannelId && legacyMessageIds.length > 0) {
+          try {
+            const channel = await interaction.client.channels.fetch(legacyChannelId);
+            if (channel && channel.isTextBased() && !channel.isDMBased()) {
+              for (const messageId of legacyMessageIds) {
+                try {
+                  const message = await (channel as any).messages.fetch(messageId);
+                  await message.delete();
+                  messagesDeleted++;
+                } catch (error: any) {
+                  this.logger.warn(`Failed to delete legacy message ${messageId}: ${error.message}`);
+                }
+              }
+            }
+          } catch (error: any) {
+            this.logger.warn(`Failed to fetch channel for legacy message deletion: ${error.message}`);
+          }
+        }
+        
+        configStorage.removeGuild(legacyId);
+        cleanedLegacy = true;
+      }
+    }
+
+    // Remove the entire guild configuration so it starts completely fresh
+    configStorage.removeGuild(interaction.guildId);
+
+    const embed = new EmbedBuilder()
+      .setColor(0xff9900)
+      .setTitle('⚠️ Configuration Reset')
+      .setDescription(
+        '**This server\'s configuration has been completely reset.**\n\n' +
+        (messagesDeleted > 0 ? `✅ Deleted ${messagesDeleted} status embed message(s)\n` : '') +
+        '✅ All configuration data removed\n' +
+        (cleanedLegacy ? '✅ Legacy migration data cleaned up\n' : '') +
+        '\n⚠️ You will need to reconfigure everything:\n' +
+        '• Use `/set-channel` to set your status channel\n' +
+        '• Use `/track` to add monitors\n' +
+        '• Use `/group-create` to create groups'
+      )
+      .setTimestamp();
+
+    await interaction.editReply({ embeds: [embed] });
+  }
+
   private async addGroup(
     interaction: ChatInputCommandInteraction,
     uptimeKuma: UptimeKumaService
   ): Promise<void> {
     if (!await this.checkAdmin(interaction)) return;
+    if (!interaction.guildId) {
+      await interaction.reply({ content: '❌ This command can only be used in a server.', flags: MessageFlags.Ephemeral });
+      return;
+    }
 
     const name = interaction.options.getString('name', true);
     
-    const success = configStorage.addGroup(name);
+    const success = configStorage.addGroup(interaction.guildId, name);
 
     if (success) {
       const embed = new EmbedBuilder()
@@ -432,10 +558,14 @@ export class CommandsService {
     uptimeKuma: UptimeKumaService
   ): Promise<void> {
     if (!await this.checkAdmin(interaction)) return;
+    if (!interaction.guildId) {
+      await interaction.reply({ content: '❌ This command can only be used in a server.', flags: MessageFlags.Ephemeral });
+      return;
+    }
 
     const groupName = interaction.options.getString('group', true);
     
-    const success = configStorage.removeGroup(groupName);
+    const success = configStorage.removeGroup(interaction.guildId, groupName);
 
     if (success) {
       const embed = new EmbedBuilder()
@@ -458,12 +588,16 @@ export class CommandsService {
     uptimeKuma: UptimeKumaService
   ): Promise<void> {
     if (!await this.checkAdmin(interaction)) return;
+    if (!interaction.guildId) {
+      await interaction.reply({ content: '❌ This command can only be used in a server.', flags: MessageFlags.Ephemeral });
+      return;
+    }
 
     const groupName = interaction.options.getString('group', true);
     const monitorIdStr = interaction.options.getString('monitor', true);
     const monitorId = parseInt(monitorIdStr, 10);
 
-    const success = configStorage.addMonitorToGroup(groupName, monitorId);
+    const success = configStorage.addMonitorToGroup(interaction.guildId, groupName, monitorId);
 
     if (success) {
       const monitors = uptimeKuma.getAllMonitors();
@@ -489,11 +623,15 @@ export class CommandsService {
     uptimeKuma: UptimeKumaService
   ): Promise<void> {
     if (!await this.checkAdmin(interaction)) return;
+    if (!interaction.guildId) {
+      await interaction.reply({ content: '❌ This command can only be used in a server.', flags: MessageFlags.Ephemeral });
+      return;
+    }
 
     const monitorIdStr = interaction.options.getString('monitor', true);
     const monitorId = parseInt(monitorIdStr, 10);
 
-    const success = configStorage.removeMonitorFromGroup(monitorId);
+    const success = configStorage.removeMonitorFromGroup(interaction.guildId, monitorId);
 
     if (success) {
       const monitors = uptimeKuma.getAllMonitors();
@@ -519,8 +657,12 @@ export class CommandsService {
     uptimeKuma: UptimeKumaService
   ): Promise<void> {
     if (!await this.checkAdmin(interaction)) return;
+    if (!interaction.guildId) {
+      await interaction.reply({ content: '❌ This command can only be used in a server.', flags: MessageFlags.Ephemeral });
+      return;
+    }
 
-    const groups = configStorage.getGroups();
+    const groups = configStorage.getGroups(interaction.guildId);
 
     if (groups.length === 0) {
       await interaction.reply({
@@ -532,7 +674,7 @@ export class CommandsService {
 
     const monitors = uptimeKuma.getAllMonitors();
     const embed = new EmbedBuilder()
-      .setColor(configStorage.getEmbedColor())
+      .setColor(configStorage.getEmbedColor(interaction.guildId))
       .setTitle('📋 Monitor Groups')
       .setTimestamp();
 
@@ -625,7 +767,12 @@ export class CommandsService {
     interaction: AutocompleteInteraction,
     query: string
   ): Promise<void> {
-    const groups = configStorage.getGroups();
+    if (!interaction.guildId) {
+      await interaction.respond([]);
+      return;
+    }
+
+    const groups = configStorage.getGroups(interaction.guildId);
     const lowerQuery = query.toLowerCase();
 
     const filtered = groups
