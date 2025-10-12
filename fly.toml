@@ -1,10 +1,11 @@
-# fly.toml app configuration file generated for boker-discord-uptime-kuma on 2025-10-11T00:11:47-05:00
+# fly.toml app configuration file
 #
 # See https://fly.io/docs/reference/configuration/ for information about how to use this file.
 #
+# The app name and region will be set when you run: fly launch --copy-config
 
-app = 'boker-discord-uptime-kuma'
-primary_region = 'iad'
+# app = 'your-app-name-here'  # Set during fly launch
+# primary_region = 'iad'       # Set during fly launch (closest region to you)
 
 [build]
   dockerfile = 'Dockerfile'
