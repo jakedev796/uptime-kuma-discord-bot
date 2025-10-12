@@ -56,6 +56,9 @@ Type these commands in Discord:
 
 Done!
 
+**Using the bot in multiple servers?**
+The bot supports multiple Discord servers independently! Each server has its own configuration. Just repeat the `/set-channel` setup in each server.
+
 ## What's Next?
 
 ### Organize with Groups
@@ -78,6 +81,7 @@ Done!
 /untrack            # Type monitor name, remove it
 /group-remove-monitor # Remove monitor from its group
 /group-delete       # Delete entire group
+/reset-config       # Reset all settings (deletes embeds, clears everything)
 ```
 
 ## Troubleshooting

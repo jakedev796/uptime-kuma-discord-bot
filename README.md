@@ -5,14 +5,15 @@ A comprehensive Discord bot that integrates with [Uptime Kuma](https://github.co
 ## Features
 
 - **Real-time Monitoring**: Socket.io connection with automatic updates
+- **Multi-Guild Support**: Use the bot in multiple Discord servers with independent configurations
 - **Slash Commands**: Configure everything directly from Discord with autocomplete
 - **Rich Embeds**: Simple embeds with status indicators (green/red/yellow/blue circles)
 - **Monitor Grouping**: Organize monitors into custom sections (Media, Gaming, etc.)
-- **Persistent Configuration**: All settings saved automatically
+- **Persistent Configuration**: All settings saved automatically per server
 - **Docker Support**: Full Docker and Docker Compose support
 - **Fly.io Ready**: One-click deployment to Fly.io (free tier compatible)
 - **Admin Controls**: Restrict commands to specific users
-- **Auto-Reconnection**: Handles disconnections gracefully
+- **Auto-Reconnection**: Handles disconnections gracefully with infinite retry
 
 ## Commands
 
@@ -24,6 +25,7 @@ All configuration via simple, autocomplete-powered slash commands:
 | `/set-channel <channel>` | Set where to post status updates |
 | `/set-title <title>` | Set the embed title (replaces "Uptime Kuma Status") |
 | `/config` | Show full bot configuration and status |
+| `/reset-config` | Reset this server's configuration (deletes embeds, clears all settings) |
 
 ### Monitor Commands
 | Command | Description |
@@ -118,6 +120,27 @@ Other Services
 Last updated: 2:30 PM
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
+
+## Multi-Guild Support
+
+The bot can be used in **multiple Discord servers simultaneously**, with each server having its own independent configuration:
+
+- Each server has its own status channel
+- Each server can track different monitors
+- Each server can have different groups
+- Each server has its own embed title and color settings
+
+**Setup for multiple servers:**
+1. Invite the bot to multiple Discord servers
+2. In each server, run `/set-channel` to configure where status updates go
+3. Configure monitors and groups independently in each server
+
+**To reset a server's configuration:**
+```
+/reset-config    # Deletes all embeds and clears all settings for this server
+```
+
+This is useful when moving to a new channel or starting fresh.
 
 ## Configuration
 
