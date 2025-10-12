@@ -107,15 +107,17 @@ The bot supports multiple Discord servers independently! Each server has its own
 |---------|--------------|
 | `/set-channel` | Choose status channel |
 | `/set-title` | Customize embed title |
-| `/track` | Add monitor (autocomplete!) |
-| `/untrack` | Remove monitor (autocomplete!) |
+| `/track` | Add monitor |
+| `/untrack` | Remove monitor |
 | `/track-all` | Track everything |
 | `/group-create` | Create new group |
-| `/group-delete` | Delete group (autocomplete!) |
-| `/group-add-monitor` | Add to group (both autocomplete!) |
-| `/group-remove-monitor` | Remove from group (autocomplete!) |
+| `/group-delete` | Delete group |
+| `/group-add-monitor` | Add to group |
+| `/group-remove-monitor` | Remove from group |
 | `/groups` | List all groups |
 | `/config` | See full status |
+| `/reset-config` | Reset all settings (per guild) |
+
 
 ## Pro Tips
 
