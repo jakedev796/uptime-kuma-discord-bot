@@ -138,18 +138,26 @@ class UptimeKumaDiscordBot {
     const port = parseInt(process.env.HEALTH_PORT || '3000', 10);
     
     this.healthServer = http.createServer((req, res) => {
-      if (req.url === '/health' && req.method === 'GET') {
+      if (req.url === '/health' && (req.method === 'GET' || req.method === 'HEAD')) {
         const isHealthy = this.discord.isConnected() && this.uptimeKuma.isConnected();
         const status = isHealthy ? 'healthy' : 'unhealthy';
         const statusCode = isHealthy ? 200 : 503;
-        
-        res.writeHead(statusCode, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({
+
+        const body = JSON.stringify({
           status,
           discord: this.discord.isConnected() ? 'connected' : 'disconnected',
           uptimeKuma: this.uptimeKuma.isConnected() ? 'connected' : 'disconnected',
-          timestamp: new Date().toISOString()
-        }));
+          timestamp: new Date().toISOString(),
+        });
+
+        res.writeHead(statusCode, {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(body),
+        });
+
+        // For HEAD, send headers only
+        if (req.method === 'HEAD') return res.end();
+        return res.end(body);
       } else {
         res.writeHead(404, { 'Content-Type': 'text/plain' });
         res.end('Not Found');

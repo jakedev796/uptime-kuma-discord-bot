@@ -23,7 +23,7 @@
   destination = '/app/data'
 
 [http_service]
-  internal_port = 8080
+  internal_port = 3000
   auto_stop_machines = 'off'
   auto_start_machines = false
   min_machines_running = 1
