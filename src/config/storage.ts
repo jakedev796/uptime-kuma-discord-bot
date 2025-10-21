@@ -25,6 +25,7 @@ export class ConfigStorage {
   private configPath: string;
   private config: MultiGuildConfig;
   private logger: Logger;
+  private saveTimeout: NodeJS.Timeout | null = null;
 
   constructor() {
     this.logger = new Logger('ConfigStorage');
@@ -73,11 +74,31 @@ export class ConfigStorage {
   }
 
   private save(): void {
+    // Debounce saves to prevent excessive writes
+    if (this.saveTimeout) {
+      clearTimeout(this.saveTimeout);
+    }
+    
+    this.saveTimeout = setTimeout(() => {
+      this.forceSave();
+    }, 100); // 100ms debounce
+  }
+
+  private forceSave(): void {
     try {
       writeFileSync(this.configPath, JSON.stringify(this.config, null, 2), 'utf-8');
       this.logger.info('Saved configuration to storage');
     } catch (error: any) {
       this.logger.error(`Failed to save config: ${error.message}`);
+    }
+    this.saveTimeout = null;
+  }
+
+  public flush(): void {
+    // Force immediate save (useful for shutdown)
+    if (this.saveTimeout) {
+      clearTimeout(this.saveTimeout);
+      this.forceSave();
     }
   }
 

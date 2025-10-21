@@ -362,8 +362,9 @@ export class DiscordService {
         }
       } catch (error: any) {
         this.logger.error(`Failed to update message for guild ${guildId}: ${error.message}`);
+        // Don't create new messages here - let the main flow handle it
+        // Just clear the message IDs so next update will create new ones
         configStorage.setMessageIds(guildId, []);
-        await this.createNewMessages(guildId, channel, embeds);
         return;
       }
     }

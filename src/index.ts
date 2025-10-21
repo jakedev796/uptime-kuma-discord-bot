@@ -188,6 +188,9 @@ class UptimeKumaDiscordBot {
       this.uptimeKuma.disconnect();
       this.discord.disconnect();
 
+      // Flush any pending config saves
+      configStorage.flush();
+
       this.logger.info('Shutdown complete');
       process.exit(0);
     } catch (error: any) {
