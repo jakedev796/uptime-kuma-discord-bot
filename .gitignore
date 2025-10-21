@@ -7,3 +7,5 @@ data/
 bot-config.json
 .fly/
 
+# Test coverage
+coverage

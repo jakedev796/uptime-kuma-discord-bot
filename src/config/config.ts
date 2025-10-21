@@ -34,7 +34,7 @@ class ConfigManager {
         adminUserIds: this.parseAdminUserIds(process.env.ADMIN_USER_IDS),
       },
       uptimeKuma: {
-        url: process.env.UPTIME_KUMA_URL || 'http://localhost:3001',
+        url: (process.env.UPTIME_KUMA_URL && process.env.UPTIME_KUMA_URL.trim() !== '') ? process.env.UPTIME_KUMA_URL : (process.env.UPTIME_KUMA_URL === '' ? '' : 'http://localhost:3001'),
         username: process.env.UPTIME_KUMA_USERNAME || '',
         password: process.env.UPTIME_KUMA_PASSWORD || '',
       },
@@ -85,6 +85,7 @@ class ConfigManager {
   }
 }
 
+export { ConfigManager };
 export const configManager = new ConfigManager();
 export const config = configManager.getConfig();
 

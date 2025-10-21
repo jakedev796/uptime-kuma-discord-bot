@@ -306,6 +306,31 @@ Configuration saved to Docker volume `botdata`:
 ```bash
 npm install
 npm run dev  # Development mode with ts-node
+npm test     # Run unit tests
+npm run test:watch  # Run tests in watch mode
+npm run test:coverage  # Run tests with coverage report
+```
+
+### Testing
+
+The project includes unit tests covering:
+
+- **Health Check Endpoint**: Tests the `/health` endpoint logic and response codes
+- **Configuration Management**: Tests environment variable parsing and validation
+- **Storage System**: Tests persistent configuration storage and guild management
+- **Service Connections**: Tests Discord and Uptime Kuma service connection states
+
+**Test Coverage:**
+- Configuration validation and error handling
+- Storage persistence and data integrity
+- Health check endpoint responses
+- Service connection state management
+
+**Running Tests:**
+```bash
+npm test                    # Run all tests
+npm run test:watch         # Run tests in watch mode
+npm run test:coverage      # Generate coverage report
 ```
 
 ## Project Structure
@@ -325,10 +350,18 @@ uptime-kuma-discord-bot/
 │   ├── utils/
 │   │   └── logger.ts          # Logging utility
 │   └── index.ts               # Application entry point
+├── tests/                     # Unit tests
+│   ├── config.test.ts         # Configuration tests
+│   ├── discord.service.test.ts # Discord service tests
+│   ├── health.test.ts         # Health check tests
+│   ├── storage.test.ts        # Storage tests
+│   ├── uptime-kuma.service.test.ts # Uptime Kuma service tests
+│   └── setup.ts               # Test setup
 ├── data/                      # Persistent configuration (auto-created)
 │   └── bot-config.json        # Stored settings and monitor groups
 ├── docker-compose.yml         # Docker Compose configuration
 ├── Dockerfile                 # Docker image definition
+├── jest.config.js             # Jest testing configuration
 ├── package.json               # Dependencies
 └── tsconfig.json              # TypeScript configuration
 ```
