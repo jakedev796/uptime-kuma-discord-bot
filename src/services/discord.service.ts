@@ -13,6 +13,12 @@ export class DiscordService {
   private maxMonitorsPerEmbed = 20;
   private commandsService: CommandsService;
   private uptimeKumaService: UptimeKumaService | null = null;
+  private latestMonitors: MonitorStats[] = [];
+  private isUpdateInProgress = false;
+  private pendingUpdate = false;
+  private forceNextUpdate = false;
+  private lastUpdateTimes: Map<string, number> = new Map();
+  private hasLoggedNoGuilds = false;
 
   constructor() {
     this.client = new Client({
@@ -167,28 +173,81 @@ export class DiscordService {
       this.channels.set(guildId, textChannel);
       configStorage.setMessageIds(guildId, []);
       configStorage.setChannelId(guildId, channelId);
+      this.lastUpdateTimes.delete(guildId);
       this.logger.info(`Changed status channel for guild ${guildId} to: ${textChannel.name}`);
+
+      if (this.uptimeKumaService) {
+        const monitors = this.uptimeKumaService.getMonitorStats();
+        await this.updateMonitorStatus(monitors, { force: true }).catch((error: any) => {
+          this.logger.error(`Failed to run immediate update for guild ${guildId}: ${error.message}`);
+        });
+      }
     } catch (error: any) {
       throw new Error(`Failed to set channel: ${error.message}`);
     }
   }
 
-  public async updateMonitorStatus(monitors: MonitorStats[]): Promise<void> {
-    const guildIds = configStorage.getAllGuildIds();
-    
-    if (guildIds.length === 0) {
-      this.logger.warn('No guilds configured, skipping update');
+  public async updateMonitorStatus(monitors: MonitorStats[], options: { force?: boolean } = {}): Promise<void> {
+    this.latestMonitors = monitors;
+    if (options.force) {
+      this.forceNextUpdate = true;
+    }
+
+    if (this.isUpdateInProgress) {
+      this.pendingUpdate = true;
       return;
     }
 
+    await this.processPendingUpdates();
+  }
+
+  private async processPendingUpdates(): Promise<void> {
+    this.isUpdateInProgress = true;
+
+    try {
+      do {
+        this.pendingUpdate = false;
+        const monitorsSnapshot = [...this.latestMonitors];
+        const force = this.forceNextUpdate;
+        this.forceNextUpdate = false;
+
+        await this.performUpdate(monitorsSnapshot, force);
+      } while (this.pendingUpdate);
+    } finally {
+      this.isUpdateInProgress = false;
+    }
+  }
+
+  private async performUpdate(monitors: MonitorStats[], force: boolean): Promise<void> {
+    const guildIds = configStorage.getAllGuildIds();
+
+    if (guildIds.length === 0) {
+      if (!this.hasLoggedNoGuilds) {
+        this.logger.warn('No guilds configured, skipping update');
+        this.hasLoggedNoGuilds = true;
+      }
+      return;
+    }
+
+    this.hasLoggedNoGuilds = false;
+    const totalMonitors = monitors.length;
+    const now = Date.now();
+
     for (const guildId of guildIds) {
-      // Skip if guild doesn't actually exist in config (shouldn't happen but safety check)
       if (!configStorage.guildExists(guildId)) {
         continue;
       }
 
       const channel = this.channels.get(guildId);
       if (!channel) {
+        continue;
+      }
+
+      const interval = configStorage.getUpdateInterval(guildId);
+      const lastUpdate = this.lastUpdateTimes.get(guildId) ?? 0;
+      const dueForUpdate = force || now - lastUpdate >= interval;
+
+      if (!dueForUpdate) {
         continue;
       }
 
@@ -202,14 +261,16 @@ export class DiscordService {
           continue;
         }
 
-        const embeds = this.createEmbeds(guildId, filteredMonitors, monitors.length);
-        
+        const embeds = this.createEmbeds(guildId, filteredMonitors, totalMonitors);
+
         const messageIds = configStorage.getMessageIds(guildId);
         if (messageIds.length === 0) {
           await this.createNewMessages(guildId, channel, embeds);
         } else {
           await this.updateExistingMessages(guildId, channel, embeds);
         }
+
+        this.lastUpdateTimes.set(guildId, Date.now());
       } catch (error: any) {
         this.logger.error(`Failed to update monitor status for guild ${guildId}: ${error.message}`);
       }
@@ -365,6 +426,7 @@ export class DiscordService {
         // Don't create new messages here - let the main flow handle it
         // Just clear the message IDs so next update will create new ones
         configStorage.setMessageIds(guildId, []);
+        this.lastUpdateTimes.delete(guildId);
         return;
       }
     }

@@ -74,6 +74,11 @@ export class ConfigStorage {
   }
 
   private save(): void {
+    if (process.env.JEST_WORKER_ID) {
+      this.forceSave();
+      return;
+    }
+
     // Debounce saves to prevent excessive writes
     if (this.saveTimeout) {
       clearTimeout(this.saveTimeout);
@@ -85,6 +90,11 @@ export class ConfigStorage {
   }
 
   private forceSave(): void {
+    if (this.saveTimeout) {
+      clearTimeout(this.saveTimeout);
+      this.saveTimeout = null;
+    }
+
     try {
       writeFileSync(this.configPath, JSON.stringify(this.config, null, 2), 'utf-8');
       this.logger.info('Saved configuration to storage');
@@ -218,6 +228,9 @@ export class ConfigStorage {
 
   public setChannelId(guildId: string, channelId: string): void {
     const config = this.getGuildConfig(guildId);
+    if (config.channelId === channelId) {
+      return;
+    }
     config.channelId = channelId;
     this.save();
   }
@@ -240,7 +253,10 @@ export class ConfigStorage {
 
   public setMessageIds(guildId: string, ids: string[]): void {
     const config = this.getGuildConfig(guildId);
-    config.messageIds = ids;
+    if (config.messageIds.length === ids.length && config.messageIds.every((id, index) => id === ids[index])) {
+      return;
+    }
+    config.messageIds = [...ids];
     this.save();
   }
 

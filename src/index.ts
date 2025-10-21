@@ -3,6 +3,7 @@ import { configStorage } from './config/storage';
 import { UptimeKumaService } from './services/uptime-kuma.service';
 import { DiscordService } from './services/discord.service';
 import { Logger } from './utils/logger';
+import { MonitorStats } from './types/uptime-kuma';
 import * as http from 'http';
 
 class UptimeKumaDiscordBot {
@@ -68,7 +69,7 @@ class UptimeKumaDiscordBot {
   }
 
   private setupEventListeners(): void {
-    this.uptimeKuma.on('monitorsUpdated', (monitors: any) => {
+    this.uptimeKuma.on('monitorsUpdated', (monitors: MonitorStats[]) => {
       this.discord.updateMonitorStatus(monitors).catch((error: Error) => {
         this.logger.error(`Failed to update Discord status: ${error.message}`);
       });
@@ -120,8 +121,7 @@ class UptimeKumaDiscordBot {
       });
     };
 
-    // Use a default interval; guilds can have different intervals but we'll use a common update cycle
-    const defaultInterval = parseInt(process.env.UPDATE_INTERVAL || '60', 10) * 1000;
+    const defaultInterval = config.bot.updateInterval;
     this.updateInterval = setInterval(updateFn, defaultInterval);
 
     this.logger.info(`Update interval set to ${defaultInterval / 1000} seconds`);
