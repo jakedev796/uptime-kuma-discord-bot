@@ -82,7 +82,10 @@ docker run -d \
   -e UPTIME_KUMA_URL=your_url \
   -e UPTIME_KUMA_USERNAME=your_username \
   -e UPTIME_KUMA_PASSWORD=your_password \
+  -e PUID=1001 \
+  -e PGID=1001 \
   -v bot-data:/app/data \
+  --restart unless-stopped \
   boker02/uptime-kuma-discord-bot:latest
 ```
 
@@ -220,14 +223,30 @@ docker network connect uptime-kuma-network uptime-kuma
 UPTIME_KUMA_URL=http://uptime-kuma:3001
 ```
 
+### Health Check
+
+The bot includes a health check endpoint at `/health` that returns:
+- `200` if both Discord and Uptime Kuma are connected
+- `503` if either service is disconnected
+
+Docker health check runs every 30 seconds and will mark the container as unhealthy if the bot can't connect to both services.
+
 ### Persistent Data
 
-Configuration saved to Docker volume `bot-data`:
+Configuration saved to Docker volume `botdata`:
 - Channel ID
 - Message IDs (for reuse)
 - Tracked monitors
 - Groups and assignments
 - Custom title
+
+### Docker Environment Variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `PUID`/`PGID` | User/group IDs | `1001` |
+| `DATA_DIR` | Data directory path | `/app/data` |
+| `HEALTH_PORT` | Health check port | `3000` |
 
 ## Security
 
@@ -262,6 +281,12 @@ Configuration saved to Docker volume `bot-data`:
 - This is fixed! Bot now reuses messages
 - Message IDs saved to `data/bot-config.json`
 - Check logs for message handling status
+
+### Docker-specific issues
+- **Container unhealthy**: Check health endpoint `curl http://localhost:3000/health`
+- **Container won't start**: Verify environment variables are set correctly
+- **Data not persisting**: Ensure the `botdata` volume is properly mounted
+- **Permission errors**: Adjust `PUID`/`PGID` in docker-compose.yml if needed
 
 ## Documentation Files
 

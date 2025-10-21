@@ -1,52 +1,27 @@
-version: '3.8'
-
 services:
   uptime-kuma-discord-bot:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: boker02/uptime-kuma-discord-bot:latest
     container_name: uptime-kuma-discord-bot
     restart: unless-stopped
     environment:
-      # Discord Configuration
       DISCORD_BOT_TOKEN: ${DISCORD_BOT_TOKEN}
-      
-      # Uptime Kuma Configuration
       UPTIME_KUMA_URL: ${UPTIME_KUMA_URL:-http://localhost:3001}
       UPTIME_KUMA_USERNAME: ${UPTIME_KUMA_USERNAME}
       UPTIME_KUMA_PASSWORD: ${UPTIME_KUMA_PASSWORD}
-      
-      # Bot Configuration
       UPDATE_INTERVAL: ${UPDATE_INTERVAL:-60}
       EMBED_COLOR: ${EMBED_COLOR:-5814783}
-      
-      # Admin User IDs (comma-separated Discord user IDs)
       ADMIN_USER_IDS: ${ADMIN_USER_IDS:-}
-      
-      # Data directory for persistent configuration
+
+      PUID: 1001
+      PGID: 1001
       DATA_DIR: /app/data
-    
-    # Persistent volume for bot configuration
     volumes:
-      - bot-data:/app/data
-    
-    # If Uptime Kuma is running in the same Docker network
-    # networks:
-    #   - uptime-kuma-network
-    
-    # Logging configuration
+      - botdata:/app/data
     logging:
-      driver: "json-file"
+      driver: json-file
       options:
         max-size: "10m"
         max-file: "3"
 
 volumes:
-  bot-data:
-    driver: local
-
-# Uncomment if using Docker network
-# networks:
-#   uptime-kuma-network:
-#     external: true
-
+  botdata:

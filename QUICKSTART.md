@@ -41,6 +41,14 @@ docker-compose up -d
 # or: npm install && npm run build && npm start
 ```
 
+### Docker Environment Variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `PUID`/`PGID` | User/group IDs | `1001` |
+| `DATA_DIR` | Data directory path | `/app/data` |
+| `HEALTH_PORT` | Health check port | `3000` |
+
 ## Step 3: Configure in Discord (1 minute)
 
 Type these commands in Discord:
@@ -95,6 +103,8 @@ The bot supports multiple Discord servers independently! Each server has its own
 - Check `.env` credentials
 - View logs: `docker-compose logs -f`
 - Try `/config` in Discord
+- Check container health: `docker-compose ps`
+- Test health endpoint: `curl http://localhost:3000/health`
 
 ### Permission denied
 - Add your Discord user ID to `ADMIN_USER_IDS` in `.env`

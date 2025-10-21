@@ -3,6 +3,7 @@ import { configStorage } from './config/storage';
 import { UptimeKumaService } from './services/uptime-kuma.service';
 import { DiscordService } from './services/discord.service';
 import { Logger } from './utils/logger';
+import * as http from 'http';
 
 class UptimeKumaDiscordBot {
   private uptimeKuma: UptimeKumaService;
@@ -10,6 +11,7 @@ class UptimeKumaDiscordBot {
   private updateInterval: NodeJS.Timeout | null = null;
   private logger: Logger;
   private isShuttingDown = false;
+  private healthServer: http.Server | null = null;
 
   constructor() {
     this.uptimeKuma = new UptimeKumaService();
@@ -54,6 +56,8 @@ class UptimeKumaDiscordBot {
       this.setupEventListeners();
       
       this.startUpdateInterval();
+      
+      this.startHealthServer();
       
       this.logger.info('Bot started successfully!');
     } catch (error: any) {
@@ -130,6 +134,37 @@ class UptimeKumaDiscordBot {
     }
   }
 
+  private startHealthServer(): void {
+    const port = parseInt(process.env.HEALTH_PORT || '3000', 10);
+    
+    this.healthServer = http.createServer((req, res) => {
+      if (req.url === '/health' && req.method === 'GET') {
+        const isHealthy = this.discord.isConnected() && this.uptimeKuma.isConnected();
+        const status = isHealthy ? 'healthy' : 'unhealthy';
+        const statusCode = isHealthy ? 200 : 503;
+        
+        res.writeHead(statusCode, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          status,
+          discord: this.discord.isConnected() ? 'connected' : 'disconnected',
+          uptimeKuma: this.uptimeKuma.isConnected() ? 'connected' : 'disconnected',
+          timestamp: new Date().toISOString()
+        }));
+      } else {
+        res.writeHead(404, { 'Content-Type': 'text/plain' });
+        res.end('Not Found');
+      }
+    });
+
+    this.healthServer.listen(port, '0.0.0.0', () => {
+      this.logger.info(`Health check server listening on port ${port}`);
+    });
+
+    this.healthServer.on('error', (error: any) => {
+      this.logger.error(`Health server error: ${error.message}`);
+    });
+  }
+
   private async shutdown(): Promise<void> {
     if (this.isShuttingDown) {
       return;
@@ -143,6 +178,11 @@ class UptimeKumaDiscordBot {
       if (this.updateInterval) {
         clearInterval(this.updateInterval);
         this.updateInterval = null;
+      }
+
+      if (this.healthServer) {
+        this.healthServer.close();
+        this.healthServer = null;
       }
 
       this.uptimeKuma.disconnect();

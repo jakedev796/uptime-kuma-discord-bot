@@ -33,6 +33,10 @@ export class DiscordService {
     return this.client;
   }
 
+  public isConnected(): boolean {
+    return this.client.isReady();
+  }
+
   public async connect(): Promise<void> {
     return new Promise((resolve, reject) => {
       this.client.once('ready', async (client) => {
