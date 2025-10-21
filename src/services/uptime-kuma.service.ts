@@ -12,6 +12,9 @@ export class UptimeKumaService extends EventEmitter {
   private isAuthenticated = false;
   private logger: Logger;
   private manualReconnectTimeout: NodeJS.Timeout | null = null;
+  private authRetryAttempts = 0;
+  private maxAuthRetries = 5;
+  private authRetryDelay = 10000;
 
   constructor() {
     super();
@@ -68,6 +71,11 @@ export class UptimeKumaService extends EventEmitter {
         if (!this.isConnected() && this.socket) {
           this.logger.info('Attempting manual reconnection...');
           this.socket.connect();
+        } else if (!this.isConnected() && !this.socket) {
+          this.logger.info('Socket is null, attempting full reconnection...');
+          this.connect().catch(err => {
+            this.logger.error(`Manual reconnection failed: ${err.message}`);
+          });
         }
       }, 30000);
     });
@@ -79,11 +87,11 @@ export class UptimeKumaService extends EventEmitter {
         this.manualReconnectTimeout = null;
       }
 
-      if (this.reconnectAttempts > 0) {
-        this.logger.info('Reconnected to Uptime Kuma, re-authenticating...');
+      if (this.reconnectAttempts > 0 || !this.isAuthenticated) {
+        this.logger.info('Connected to Uptime Kuma, authenticating...');
         this.reconnectAttempts = 0;
-        this.authenticate().catch(err => {
-          this.logger.error(`Re-authentication failed: ${err.message}`);
+        this.authenticateWithRetry().catch(err => {
+          this.logger.error(`Authentication failed after retries: ${err.message}`);
         });
       }
     });
@@ -139,6 +147,7 @@ export class UptimeKumaService extends EventEmitter {
           
           if (response.ok) {
             this.isAuthenticated = true;
+            this.authRetryAttempts = 0;
             this.logger.info('Successfully authenticated with Uptime Kuma');
             resolve();
           } else {
@@ -149,6 +158,31 @@ export class UptimeKumaService extends EventEmitter {
         }
       );
     });
+  }
+
+  private async authenticateWithRetry(): Promise<void> {
+    if (this.authRetryAttempts >= this.maxAuthRetries) {
+      throw new Error(`Authentication failed after ${this.maxAuthRetries} attempts`);
+    }
+
+    try {
+      await this.authenticate();
+    } catch (error: any) {
+      this.authRetryAttempts++;
+      this.logger.warn(`Authentication attempt ${this.authRetryAttempts}/${this.maxAuthRetries} failed: ${error.message}`);
+      
+      if (this.authRetryAttempts < this.maxAuthRetries) {
+        this.logger.info(`Retrying authentication in ${this.authRetryDelay / 1000} seconds...`);
+        setTimeout(() => {
+          this.authenticateWithRetry().catch(err => {
+            this.logger.error(`Authentication retry failed: ${err.message}`);
+          });
+        }, this.authRetryDelay);
+      } else {
+        this.logger.error(`Authentication failed after ${this.maxAuthRetries} attempts. Manual intervention required.`);
+        throw error;
+      }
+    }
   }
 
   public getAllMonitors(): Map<number, Monitor> {
@@ -261,6 +295,12 @@ export class UptimeKumaService extends EventEmitter {
     return this.socket !== null && this.socket.connected && this.isAuthenticated;
   }
 
+  public async forceReconnect(): Promise<void> {
+    this.logger.info('Force reconnecting to Uptime Kuma...');
+    this.disconnect();
+    await this.connect();
+  }
+
   public disconnect(): void {
     if (this.manualReconnectTimeout) {
       clearTimeout(this.manualReconnectTimeout);
@@ -272,6 +312,8 @@ export class UptimeKumaService extends EventEmitter {
       this.socket.disconnect();
       this.socket = null;
       this.isAuthenticated = false;
+      this.authRetryAttempts = 0;
+      this.reconnectAttempts = 0;
     }
   }
 }

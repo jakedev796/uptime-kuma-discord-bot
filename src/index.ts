@@ -83,10 +83,31 @@ class UptimeKumaDiscordBot {
   }
 
   private startUpdateInterval(): void {
-    const updateFn = () => {
+    let consecutiveDisconnections = 0;
+    const maxConsecutiveDisconnections = 5;
+
+    const updateFn = async () => {
       if (!this.uptimeKuma.isConnected()) {
         this.logger.warn('Uptime Kuma is not connected, skipping update');
+        consecutiveDisconnections++;
+        
+        // If we've been disconnected for too long, try a force reconnect
+        if (consecutiveDisconnections >= maxConsecutiveDisconnections) {
+          this.logger.warn(`Uptime Kuma has been disconnected for ${consecutiveDisconnections} consecutive checks, attempting force reconnect...`);
+          try {
+            await this.uptimeKuma.forceReconnect();
+            consecutiveDisconnections = 0;
+            this.logger.info('Force reconnect successful');
+          } catch (error: any) {
+            this.logger.error(`Force reconnect failed: ${error.message}`);
+          }
+        }
         return;
+      }
+
+      // Reset counter on successful connection
+      if (consecutiveDisconnections > 0) {
+        consecutiveDisconnections = 0;
       }
 
       const monitors = this.uptimeKuma.getMonitorStats();

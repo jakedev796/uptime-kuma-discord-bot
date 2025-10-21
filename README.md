@@ -67,6 +67,25 @@ See **[QUICKSTART.md](QUICKSTART.md)** for detailed setup instructions.
 3. Run: `docker-compose up -d` or `npm start`
 4. Use `/set-channel` and `/track-all` in Discord
 
+### DockerHub
+
+Pre-built images are automatically available on DockerHub:
+
+```bash
+# Pull the latest image
+docker pull boker02/uptime-kuma-discord-bot:latest
+
+# Run with environment variables
+docker run -d \
+  --name uptime-kuma-discord-bot \
+  -e DISCORD_BOT_TOKEN=your_token \
+  -e UPTIME_KUMA_URL=your_url \
+  -e UPTIME_KUMA_USERNAME=your_username \
+  -e UPTIME_KUMA_PASSWORD=your_password \
+  -v bot-data:/app/data \
+  boker02/uptime-kuma-discord-bot:latest
+```
+
 ## Usage
 
 ### Basic Setup
