@@ -1,13 +1,14 @@
 import { config } from './config/config';
 import { configStorage } from './config/storage';
-import { UptimeKumaService } from './services/uptime-kuma.service';
+import { IUptimeKumaService } from './services/uptime-kuma.service';
+import { createUptimeKumaService } from './services/uptime-kuma.factory';
 import { DiscordService } from './services/discord.service';
 import { Logger } from './utils/logger';
 import { MonitorStats } from './types/uptime-kuma';
 import * as http from 'http';
 
 class UptimeKumaDiscordBot {
-  private uptimeKuma: UptimeKumaService;
+  private uptimeKuma: IUptimeKumaService;
   private discord: DiscordService;
   private updateInterval: NodeJS.Timeout | null = null;
   private logger: Logger;
@@ -15,7 +16,7 @@ class UptimeKumaDiscordBot {
   private healthServer: http.Server | null = null;
 
   constructor() {
-    this.uptimeKuma = new UptimeKumaService();
+    this.uptimeKuma = createUptimeKumaService();
     this.discord = new DiscordService();
     this.discord.setUptimeKumaService(this.uptimeKuma);
     this.logger = new Logger('Bot');

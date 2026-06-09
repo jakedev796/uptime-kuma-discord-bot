@@ -4,7 +4,18 @@ import { config } from '../config/config';
 import { Monitor, Heartbeat, MonitorStats, HeartbeatStatus, UptimeKumaResponse } from '../types/uptime-kuma';
 import { Logger } from '../utils/logger';
 
-export class UptimeKumaService extends EventEmitter {
+// Shared interface for both Uptime Kuma sources (websocket and metrics).
+export interface IUptimeKumaService {
+  connect(): Promise<void>;
+  disconnect(): void;
+  isConnected(): boolean;
+  forceReconnect(): Promise<void>;
+  getAllMonitors(): Map<number, Monitor>;
+  getMonitorStats(filterIds?: number[]): MonitorStats[];
+  on(event: string | symbol, listener: (...args: any[]) => void): this;
+}
+
+export class UptimeKumaService extends EventEmitter implements IUptimeKumaService {
   private socket: Socket | null = null;
   private monitors: Map<number, MonitorStats> = new Map();
   private reconnectAttempts = 0;
@@ -104,13 +115,17 @@ export class UptimeKumaService extends EventEmitter {
       this.handleHeartbeat(heartbeat);
     });
 
-    this.socket.on('avgPing', (data: { monitorID: number; avgPing: number | null }) => {
-      this.handleAvgPing(data.monitorID, data.avgPing);
+    // avgPing/uptime come as positional args, not an object:
+    //   ("avgPing", monitorID, avgPing) and ("uptime", monitorID, period, ratio)
+    // period is a number (24, 720) or "1y", ratio is 0-1
+    this.socket.on('avgPing', (monitorID: number, avgPing: number | null) => {
+      this.handleAvgPing(monitorID, avgPing);
     });
 
-    this.socket.on('uptime', (data: { monitorID: number; periodKey: string; percentage: number }) => {
-      if (data.periodKey === '24') {
-        this.handleUptime(data.monitorID, data.percentage);
+    this.socket.on('uptime', (monitorID: number, period: number | string, percentage: number) => {
+      // only the 24h window; convert the 0-1 ratio to a percentage
+      if (Number(period) === 24) {
+        this.handleUptime(monitorID, percentage * 100);
       }
     });
 

@@ -5,6 +5,7 @@ A comprehensive Discord bot that integrates with [Uptime Kuma](https://github.co
 ## Features
 
 - **Real-time Monitoring**: Socket.io connection with automatic updates
+- **Two connection modes**: `websocket` (username/password) or `metrics` (API key, no credentials) — see [Connection Modes](#connection-modes)
 - **Multi-Guild Support**: Use the bot in multiple Discord servers with independent configurations
 - **Slash Commands**: Configure everything directly from Discord with autocomplete
 - **Rich Embeds**: Simple embeds with status indicators (green/red/yellow/blue circles)
@@ -172,11 +173,42 @@ This is useful when moving to a new channel or starting fresh.
 |----------|-------------|----------|---------|
 | `DISCORD_BOT_TOKEN` | Your Discord bot token | Yes | - |
 | `UPTIME_KUMA_URL` | URL of your Uptime Kuma instance | Yes | `http://localhost:3001` |
-| `UPTIME_KUMA_USERNAME` | Uptime Kuma username | Yes | - |
-| `UPTIME_KUMA_PASSWORD` | Uptime Kuma password | Yes | - |
+| `UPTIME_KUMA_MODE` | Connection mode: `websocket` or `metrics` | No | `websocket` |
+| `UPTIME_KUMA_USERNAME` | Uptime Kuma username | `websocket` mode only | - |
+| `UPTIME_KUMA_PASSWORD` | Uptime Kuma password | `websocket` mode only | - |
+| `UPTIME_KUMA_API_KEY` | Uptime Kuma API key | `metrics` mode only | - |
 | `UPDATE_INTERVAL` | Update interval in seconds | No | `60` |
 | `EMBED_COLOR` | Decimal color code | No | `5814783` |
 | `ADMIN_USER_IDS` | Comma-separated Discord user IDs | No | `` (all users) |
+
+### Connection Modes
+
+The bot can read monitor data from Uptime Kuma in two ways, selected with `UPTIME_KUMA_MODE`:
+
+| | `websocket` (default) | `metrics` |
+|---|---|---|
+| **Auth** | Username + password | API key only (no credentials) |
+| **Transport** | Realtime socket.io push | Polls `/metrics` every `UPDATE_INTERVAL`s |
+| **Set** | `UPTIME_KUMA_USERNAME`, `UPTIME_KUMA_PASSWORD` | `UPTIME_KUMA_API_KEY` |
+| **Min. Uptime Kuma** | 1.0.0 | **1.21.0** (status + ping); **2.1.0** for 24h uptime % |
+| **Best when** | You want instant updates | You'd rather not store admin credentials |
+
+Both modes display the same data: status, response time (ping), and 24-hour uptime.
+
+In `metrics` mode the bot checks the Uptime Kuma version on startup: it **refuses to run below 1.21.0** (API keys don't exist, so `/metrics` can't be authenticated), and **warns** on 1.21–2.0.x that 24h uptime % won't be shown (the `monitor_uptime_ratio` metric was added in 2.1.0; status and ping still work).
+
+**Using `metrics` mode:**
+1. In Uptime Kuma, go to **Settings → API Keys** and create a key (e.g. `uk1_...`).
+2. In your `.env`:
+   ```env
+   UPTIME_KUMA_MODE=metrics
+   UPTIME_KUMA_API_KEY=uk1_your_api_key_here
+   # UPTIME_KUMA_USERNAME / PASSWORD are not needed
+   ```
+
+> ⚠️ Creating your **first** API key in Uptime Kuma permanently disables HTTP Basic auth (username/password) on its REST endpoints. This does not affect the websocket login, so `websocket` mode keeps working.
+
+> 🔐 **Using 2FA?** If two-factor authentication is enabled on your Uptime Kuma account (2FA has been available since Uptime Kuma **1.7.0**), `websocket` mode **cannot** log in — the bot has no way to supply a TOTP code. In that case `metrics` mode is the only option, since its API key authenticates independently of 2FA.
 
 ### Setting Up Discord Bot
 
@@ -344,7 +376,9 @@ uptime-kuma-discord-bot/
 │   ├── services/
 │   │   ├── commands.service.ts  # Discord slash commands with autocomplete
 │   │   ├── discord.service.ts   # Discord bot service
-│   │   └── uptime-kuma.service.ts # Uptime Kuma Socket.io integration
+│   │   ├── uptime-kuma.service.ts         # IUptimeKumaService + Socket.io (websocket mode)
+│   │   ├── uptime-kuma.metrics.service.ts # /metrics polling (metrics mode)
+│   │   └── uptime-kuma.factory.ts         # Selects mode from config
 │   ├── types/
 │   │   └── uptime-kuma.ts     # TypeScript type definitions
 │   ├── utils/
@@ -366,9 +400,14 @@ uptime-kuma-discord-bot/
 └── tsconfig.json              # TypeScript configuration
 ```
 
-## Why Not Use Uptime Kuma API Keys?
+## API Keys vs. Username/Password
 
-Uptime Kuma's [API Keys feature](https://github.com/louislam/uptime-kuma/wiki/API-Keys) (version >= 1.21.0) is designed for REST endpoints like Prometheus metrics, not Socket.io connections. This bot uses Socket.io for real-time monitor updates, which requires username/password authentication. API Keys are not supported for Socket.io authentication in Uptime Kuma.
+Uptime Kuma's [API Keys](https://github.com/louislam/uptime-kuma/wiki/API-Keys) only authenticate REST endpoints like Prometheus `/metrics` — **not** the Socket.io connection. So the two connection modes use different credentials:
+
+- **`websocket` mode** uses Socket.io for realtime push, which requires **username/password** (API keys are not accepted here on any Uptime Kuma version, including 2.4.x).
+- **`metrics` mode** polls the `/metrics` REST endpoint, which **does** accept an API key — letting you run the bot without storing admin credentials.
+
+Pick whichever fits your security needs; see [Connection Modes](#connection-modes) above.
 
 ## License
 

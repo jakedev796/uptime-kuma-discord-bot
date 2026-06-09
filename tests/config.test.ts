@@ -9,9 +9,11 @@ describe('ConfigManager', () => {
     
     // Clear environment variables
     delete process.env.DISCORD_BOT_TOKEN;
+    delete process.env.UPTIME_KUMA_MODE;
     delete process.env.UPTIME_KUMA_URL;
     delete process.env.UPTIME_KUMA_USERNAME;
     delete process.env.UPTIME_KUMA_PASSWORD;
+    delete process.env.UPTIME_KUMA_API_KEY;
     delete process.env.ADMIN_USER_IDS;
     delete process.env.UPDATE_INTERVAL;
     delete process.env.EMBED_COLOR;
@@ -124,6 +126,65 @@ describe('ConfigManager', () => {
     process.env.UPDATE_INTERVAL = '5'; // Less than 10 seconds
 
     expect(() => new ConfigManager()).toThrow('UPDATE_INTERVAL must be at least 10 seconds');
+  });
+
+  test('should default to websocket mode when UPTIME_KUMA_MODE is not set', () => {
+    process.env.DISCORD_BOT_TOKEN = 'test-token';
+    process.env.UPTIME_KUMA_URL = 'http://localhost:3001';
+    process.env.UPTIME_KUMA_USERNAME = 'test-user';
+    process.env.UPTIME_KUMA_PASSWORD = 'test-password';
+
+    const config = new ConfigManager().getConfig();
+
+    expect(config.uptimeKuma.mode).toBe('websocket');
+  });
+
+  test('should accept metrics mode with an API key and no username/password', () => {
+    process.env.DISCORD_BOT_TOKEN = 'test-token';
+    process.env.UPTIME_KUMA_MODE = 'metrics';
+    process.env.UPTIME_KUMA_URL = 'http://localhost:3001';
+    process.env.UPTIME_KUMA_API_KEY = 'uk1_testkey';
+
+    const config = new ConfigManager().getConfig();
+
+    expect(config.uptimeKuma.mode).toBe('metrics');
+    expect(config.uptimeKuma.apiKey).toBe('uk1_testkey');
+  });
+
+  test('should normalize mode casing/whitespace', () => {
+    process.env.DISCORD_BOT_TOKEN = 'test-token';
+    process.env.UPTIME_KUMA_MODE = '  Metrics ';
+    process.env.UPTIME_KUMA_URL = 'http://localhost:3001';
+    process.env.UPTIME_KUMA_API_KEY = 'uk1_testkey';
+
+    const config = new ConfigManager().getConfig();
+
+    expect(config.uptimeKuma.mode).toBe('metrics');
+  });
+
+  test('should throw when metrics mode is missing an API key', () => {
+    process.env.DISCORD_BOT_TOKEN = 'test-token';
+    process.env.UPTIME_KUMA_MODE = 'metrics';
+    process.env.UPTIME_KUMA_URL = 'http://localhost:3001';
+
+    expect(() => new ConfigManager()).toThrow('UPTIME_KUMA_API_KEY is required');
+  });
+
+  test('should not require username/password in metrics mode', () => {
+    process.env.DISCORD_BOT_TOKEN = 'test-token';
+    process.env.UPTIME_KUMA_MODE = 'metrics';
+    process.env.UPTIME_KUMA_URL = 'http://localhost:3001';
+    process.env.UPTIME_KUMA_API_KEY = 'uk1_testkey';
+
+    expect(() => new ConfigManager()).not.toThrow();
+  });
+
+  test('should throw on an unknown mode', () => {
+    process.env.DISCORD_BOT_TOKEN = 'test-token';
+    process.env.UPTIME_KUMA_MODE = 'carrier-pigeon';
+    process.env.UPTIME_KUMA_URL = 'http://localhost:3001';
+
+    expect(() => new ConfigManager()).toThrow("UPTIME_KUMA_MODE must be either 'websocket' or 'metrics'");
   });
 
   test('should throw error with multiple validation failures', () => {

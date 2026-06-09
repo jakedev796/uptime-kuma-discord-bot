@@ -2,7 +2,7 @@ import { Client, GatewayIntentBits, TextChannel, EmbedBuilder, Message, REST, Ro
 import { config } from '../config/config';
 import { configStorage } from '../config/storage';
 import { MonitorStats, HeartbeatStatus } from '../types/uptime-kuma';
-import { UptimeKumaService } from './uptime-kuma.service';
+import { IUptimeKumaService } from './uptime-kuma.service';
 import { CommandsService } from './commands.service';
 import { Logger } from '../utils/logger';
 
@@ -12,7 +12,7 @@ export class DiscordService {
   private logger: Logger;
   private maxMonitorsPerEmbed = 20;
   private commandsService: CommandsService;
-  private uptimeKumaService: UptimeKumaService | null = null;
+  private uptimeKumaService: IUptimeKumaService | null = null;
   private latestMonitors: MonitorStats[] = [];
   private isUpdateInProgress = false;
   private pendingUpdate = false;
@@ -31,7 +31,7 @@ export class DiscordService {
     (this.client as any).discordService = this;
   }
 
-  public setUptimeKumaService(service: UptimeKumaService): void {
+  public setUptimeKumaService(service: IUptimeKumaService): void {
     this.uptimeKumaService = service;
   }
 
