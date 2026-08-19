@@ -73,4 +73,33 @@ describe('UptimeKumaService', () => {
     expect(stats).toBeDefined();
     expect(Array.isArray(stats)).toBe(true);
   });
+
+  test('parses positional avgPing/uptime events and scales uptime to a percentage', () => {
+    // these come as positional args (id, period, ratio), not an object
+    const handlers: Record<string, (...args: any[]) => void> = {};
+    const mockSocket = {
+      connected: true,
+      on: jest.fn((event: string, cb: (...args: any[]) => void) => { handlers[event] = cb; }),
+      once: jest.fn(),
+      emit: jest.fn(),
+      connect: jest.fn(),
+      disconnect: jest.fn(),
+    };
+    (uptimeKumaService as any).socket = mockSocket;
+    (uptimeKumaService as any).setupSocketListeners();
+
+    (uptimeKumaService as any).monitors.set(1, {
+      monitor: { id: 1, name: 'Test', type: 'http', active: true, interval: 60 },
+      currentStatus: 1,
+    });
+
+    handlers['avgPing'](1, 123);
+    handlers['uptime'](1, 24, 0.9972);   // 24h window -> tracked
+    handlers['uptime'](1, 720, 0.5);     // 30d window -> ignored
+    handlers['uptime'](1, '1y', 0.4);    // 1y window  -> ignored
+
+    const stats = uptimeKumaService.getMonitorStats().find(s => s.monitor.id === 1)!;
+    expect(stats.avgPing).toBe(123);
+    expect(stats.uptime24h).toBeCloseTo(99.72, 2);
+  });
 });

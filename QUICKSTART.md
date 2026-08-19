@@ -26,7 +26,9 @@ cd uptime-kuma-discord-bot
 cp .env.example .env
 ```
 
-**Edit `.env`** (only 3 required):
+**Edit `.env`** — pick **one** connection mode:
+
+**Option A — websocket (default, username/password):**
 ```env
 DISCORD_BOT_TOKEN=your_discord_bot_token
 UPTIME_KUMA_URL=http://uptime-kuma:3001
@@ -34,6 +36,19 @@ UPTIME_KUMA_USERNAME=admin
 UPTIME_KUMA_PASSWORD=your_password
 ADMIN_USER_IDS=your_discord_user_id
 ```
+
+**Option B — metrics (API key, no credentials stored):**
+```env
+DISCORD_BOT_TOKEN=your_discord_bot_token
+UPTIME_KUMA_URL=http://uptime-kuma:3001
+UPTIME_KUMA_MODE=metrics
+UPTIME_KUMA_API_KEY=uk1_your_api_key   # Uptime Kuma → Settings → API Keys
+ADMIN_USER_IDS=your_discord_user_id
+```
+
+> Both modes show the same status, ping, and 24h uptime. See [README → Connection Modes](README.md#connection-modes) for the trade-offs.
+
+> 🔐 If your Uptime Kuma account has **2FA enabled**, you must use **Option B (metrics)** — websocket login can't supply a 2FA code, so only the API key works.
 
 **Start it:**
 ```bash

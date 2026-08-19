@@ -9,12 +9,12 @@ import {
 } from 'discord.js';
 import { config } from '../config/config';
 import { configStorage } from '../config/storage';
-import { UptimeKumaService } from './uptime-kuma.service';
+import { IUptimeKumaService } from './uptime-kuma.service';
 import { Logger } from '../utils/logger';
 
 export interface Command {
   data: SlashCommandBuilder | SlashCommandOptionsOnlyBuilder;
-  execute: (interaction: ChatInputCommandInteraction, uptimeKuma: UptimeKumaService) => Promise<void>;
+  execute: (interaction: ChatInputCommandInteraction, uptimeKuma: IUptimeKumaService) => Promise<void>;
 }
 
 export class CommandsService {
@@ -193,7 +193,7 @@ export class CommandsService {
 
   private async addMonitor(
     interaction: ChatInputCommandInteraction,
-    uptimeKuma: UptimeKumaService
+    uptimeKuma: IUptimeKumaService
   ): Promise<void> {
     if (!await this.checkAdmin(interaction)) return;
     if (!interaction.guildId) {
@@ -230,7 +230,7 @@ export class CommandsService {
 
   private async removeMonitor(
     interaction: ChatInputCommandInteraction,
-    uptimeKuma: UptimeKumaService
+    uptimeKuma: IUptimeKumaService
   ): Promise<void> {
     if (!await this.checkAdmin(interaction)) return;
     if (!interaction.guildId) {
@@ -268,7 +268,7 @@ export class CommandsService {
 
   private async trackAll(
     interaction: ChatInputCommandInteraction,
-    uptimeKuma: UptimeKumaService
+    uptimeKuma: IUptimeKumaService
   ): Promise<void> {
     if (!await this.checkAdmin(interaction)) return;
     if (!interaction.guildId) {
@@ -291,7 +291,7 @@ export class CommandsService {
 
   private async setChannel(
     interaction: ChatInputCommandInteraction,
-    uptimeKuma: UptimeKumaService
+    uptimeKuma: IUptimeKumaService
   ): Promise<void> {
     if (!await this.checkAdmin(interaction)) return;
     if (!interaction.guildId) {
@@ -327,7 +327,7 @@ export class CommandsService {
 
   private async setMessage(
     interaction: ChatInputCommandInteraction,
-    uptimeKuma: UptimeKumaService
+    uptimeKuma: IUptimeKumaService
   ): Promise<void> {
     if (!await this.checkAdmin(interaction)) return;
     if (!interaction.guildId) {
@@ -350,7 +350,7 @@ export class CommandsService {
 
   private async showConfig(
     interaction: ChatInputCommandInteraction,
-    uptimeKuma: UptimeKumaService
+    uptimeKuma: IUptimeKumaService
   ): Promise<void> {
     if (!await this.checkAdmin(interaction)) return;
     if (!interaction.guildId) {
@@ -433,7 +433,7 @@ export class CommandsService {
 
   private async resetConfig(
     interaction: ChatInputCommandInteraction,
-    uptimeKuma: UptimeKumaService
+    uptimeKuma: IUptimeKumaService
   ): Promise<void> {
     if (!await this.checkAdmin(interaction)) return;
     if (!interaction.guildId) {
@@ -525,7 +525,7 @@ export class CommandsService {
 
   private async addGroup(
     interaction: ChatInputCommandInteraction,
-    uptimeKuma: UptimeKumaService
+    uptimeKuma: IUptimeKumaService
   ): Promise<void> {
     if (!await this.checkAdmin(interaction)) return;
     if (!interaction.guildId) {
@@ -555,7 +555,7 @@ export class CommandsService {
 
   private async removeGroup(
     interaction: ChatInputCommandInteraction,
-    uptimeKuma: UptimeKumaService
+    uptimeKuma: IUptimeKumaService
   ): Promise<void> {
     if (!await this.checkAdmin(interaction)) return;
     if (!interaction.guildId) {
@@ -585,7 +585,7 @@ export class CommandsService {
 
   private async assignMonitorToGroup(
     interaction: ChatInputCommandInteraction,
-    uptimeKuma: UptimeKumaService
+    uptimeKuma: IUptimeKumaService
   ): Promise<void> {
     if (!await this.checkAdmin(interaction)) return;
     if (!interaction.guildId) {
@@ -620,7 +620,7 @@ export class CommandsService {
 
   private async unassignMonitor(
     interaction: ChatInputCommandInteraction,
-    uptimeKuma: UptimeKumaService
+    uptimeKuma: IUptimeKumaService
   ): Promise<void> {
     if (!await this.checkAdmin(interaction)) return;
     if (!interaction.guildId) {
@@ -654,7 +654,7 @@ export class CommandsService {
 
   private async listGroups(
     interaction: ChatInputCommandInteraction,
-    uptimeKuma: UptimeKumaService
+    uptimeKuma: IUptimeKumaService
   ): Promise<void> {
     if (!await this.checkAdmin(interaction)) return;
     if (!interaction.guildId) {
@@ -724,7 +724,7 @@ export class CommandsService {
 
   public async handleAutocomplete(
     interaction: AutocompleteInteraction,
-    uptimeKuma: UptimeKumaService
+    uptimeKuma: IUptimeKumaService
   ): Promise<void> {
     const focusedOption = interaction.options.getFocused(true);
 
@@ -742,7 +742,7 @@ export class CommandsService {
 
   private async autocompleteMonitors(
     interaction: AutocompleteInteraction,
-    uptimeKuma: UptimeKumaService,
+    uptimeKuma: IUptimeKumaService,
     query: string
   ): Promise<void> {
     const monitors = uptimeKuma.getAllMonitors();
